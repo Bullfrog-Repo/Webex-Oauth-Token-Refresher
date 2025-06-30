@@ -1,3 +1,16 @@
+"""
+Webex OAuth Token Refresher Script
+----------------------------------
+This script reads a JSON file of Webex OAuth credentials (tokens_master.json),
+refreshes each org's access token using the /v1/access_token endpoint, 
+and writes the results to:
+
+- access_tokens/tokens_<timestamp>.json (updated tokens)
+- token_logs/logs_<timestamp>.json (status + responses)
+
+Only orgs with valid client_id, client_secret, and refresh_token are processed.
+"""
+
 import json
 import os
 import requests
