@@ -41,12 +41,6 @@ for key, token_data in tokens_dict.items():
         token_data["status"] = "skipped"
         token_data["error"] = "Missing client_id, client_secret, or refresh_token"
         new_tokens_dict[key] = token_data
-        token_log_entries.append({
-            "org": key,
-            "timestamp": datetime.utcnow().isoformat(),
-            "status": "skipped",
-            "error": "Missing credentials"
-        })
         continue
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -54,52 +48,41 @@ for key, token_data in tokens_dict.items():
         "grant_type": "refresh_token",
         "client_id": client_id,
         "client_secret": client_secret,
-        "refresh_token": refresh_token
+        "refresh_token": refresh_token,
     }
 
     try:
-        response = requests.post(token_url, data=data, headers=headers)
-        response.raise_for_status()
-        new_data = response.json()
+        response = requests.post(token_url, headers=headers, data=data)
+        if response.status_code == 200:
+            result = response.json()
+            access_token = result.get("access_token")
+            new_refresh_token = result.get("refresh_token")
 
-        # Store new tokens
-        token_data["access_token"] = new_data.get("access_token", "")
-        token_data["refresh_token"] = new_data.get("refresh_token", "")
-        token_data["date"] = datetime.now().strftime("%B %d, %Y")
-        token_data["status"] = "success"
-        token_data.pop("error", None)
-
-        print(f"✅ {key} token refreshed successfully")
-
-        token_log_entries.append({
-            "org": key,
-            "timestamp": datetime.utcnow().isoformat(),
-            "status": "success",
-            "response": new_data
-        })
-
+            token_data["access_token"] = access_token
+            token_data["refresh_token"] = new_refresh_token
+            token_data["status"] = "success"
+            token_data["error"] = None
+            print(f"✅ {key} refreshed successfully.")
+        else:
+            token_data["status"] = "failed"
+            token_data["error"] = f"HTTP {response.status_code}: {response.text}"
+            print(f"❌ {key} failed: {response.status_code}")
     except requests.exceptions.RequestException as e:
-        token_data["status"] = "failed"
+        token_data["status"] = "error"
         token_data["error"] = str(e)
-        print(f"❌ {key} failed to refresh: {e}")
-
-        token_log_entries.append({
-            "org": key,
-            "timestamp": datetime.utcnow().isoformat(),
-            "status": "failed",
-            "error": str(e)
-        })
+        print(f"❌ {key} request error: {e}")
 
     new_tokens_dict[key] = token_data
 
-# Save to timestamped JSON
-output_file = f"access_tokens/tokens_{timestamp}.json"
-log_file = f"token_logs/logs_{timestamp}.json"
+# Write to dated token backup
+with open(os.path.join("access_tokens", f"tokens_{timestamp}.json"), "w") as output_file:
+    json.dump(new_tokens_dict, output_file, indent=4)
 
-with open(output_file, "w") as outfile:
-    json.dump(new_tokens_dict, outfile, indent=4)
+# ✅ Overwrite the master JSON with the refreshed tokens
+with open("tokens_master.json", "w") as master_file:
+    json.dump(new_tokens_dict, master_file, indent=4)
 
-with open(log_file, "w") as logfile:
+print("🎉 Token refresh complete. Master and backup files updated.")
     json.dump(token_log_entries, logfile, indent=4)
 
 print(f"\n📁 New tokens saved to: {output_file}")
