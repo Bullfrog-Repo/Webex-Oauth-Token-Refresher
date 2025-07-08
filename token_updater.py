@@ -36,11 +36,17 @@ for key, token_data in tokens_dict.items():
     client_secret = token_data.get("client_secret")
     refresh_token = token_data.get("refresh_token")
 
+    log_entry = {"org": key, "status": None, "error": None}
+
     if not all([client_id, client_secret, refresh_token]):
-        print(f"⚠️ Skipping {key} — missing credentials")
+        msg = "Missing client_id, client_secret, or refresh_token"
+        print(f"⚠️ Skipping {key} — {msg}")
         token_data["status"] = "skipped"
-        token_data["error"] = "Missing client_id, client_secret, or refresh_token"
+        token_data["error"] = msg
+        log_entry["status"] = "skipped"
+        log_entry["error"] = msg
         new_tokens_dict[key] = token_data
+        token_log_entries.append(log_entry)
         continue
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -62,17 +68,25 @@ for key, token_data in tokens_dict.items():
             token_data["refresh_token"] = new_refresh_token
             token_data["status"] = "success"
             token_data["error"] = None
+            log_entry["status"] = "success"
             print(f"✅ {key} refreshed successfully.")
         else:
+            msg = f"HTTP {response.status_code}: {response.text}"
             token_data["status"] = "failed"
-            token_data["error"] = f"HTTP {response.status_code}: {response.text}"
-            print(f"❌ {key} failed: {response.status_code}")
+            token_data["error"] = msg
+            log_entry["status"] = "failed"
+            log_entry["error"] = msg
+            print(f"❌ {key} failed: {msg}")
     except requests.exceptions.RequestException as e:
+        msg = str(e)
         token_data["status"] = "error"
-        token_data["error"] = str(e)
-        print(f"❌ {key} request error: {e}")
+        token_data["error"] = msg
+        log_entry["status"] = "error"
+        log_entry["error"] = msg
+        print(f"❌ {key} request error: {msg}")
 
     new_tokens_dict[key] = token_data
+    token_log_entries.append(log_entry)
 
 # Write to dated token backup
 with open(os.path.join("access_tokens", f"tokens_{timestamp}.json"), "w") as output_file:
@@ -82,8 +96,8 @@ with open(os.path.join("access_tokens", f"tokens_{timestamp}.json"), "w") as out
 with open("tokens_master.json", "w") as master_file:
     json.dump(new_tokens_dict, master_file, indent=4)
 
-print("🎉 Token refresh complete. Master and backup files updated.")
-    json.dump(token_log_entries, logfile, indent=4)
+# ✅ Write token refresh logs
+with open(os.path.join("token_logs", f"logs_{timestamp}.json"), "w") as log_file:
+    json.dump(token_log_entries, log_file, indent=4)
 
-print(f"\n📁 New tokens saved to: {output_file}")
-print(f"📜 Token logs saved to: {log_file}")
+print("🎉 Token refresh complete. Master, backup, and logs updated.")
